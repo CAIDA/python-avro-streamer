@@ -54,10 +54,15 @@ class GenericStreamingAvroParser(object):
     Requires: python-snappy, future (python2)
     """
 
-    def __init__(self, source):
+    def __init__(self, source, initbody):
         """
         source is the generator that will be providing the raw Avro data
         stream (e.g. a file object or some other sort of iterable).
+
+        initbody is any initial data that may have already been read by
+        the source generator (e.g. some HTTP response generators will
+        include the first 'read' in a body field and the associated generator
+        is solely used for reading additional data beyond that first blob.
         """
         self.source = source
         self.buffered = ""
@@ -67,6 +72,9 @@ class GenericStreamingAvroParser(object):
         self.codec = None
         self.state = AVRO_HEADER_MAGIC
         self.syncmarker = None
+
+        self.buffered += initbody
+        self.blen += len(initbody)
 
     def _encode_long(self, toenc):
         encoded = ""
@@ -366,8 +374,6 @@ class GenericStrippingAvroParser(GenericStreamingAvroParser):
         """
         super(GenericStrippingAvroParser, self).__init__(source)
 
-        self.buffered += initbody
-        self.blen += len(initbody)
         self.tostrip = set(tostrip)
 
     def _reencode_field(self, val, ftype, fname):
