@@ -372,7 +372,7 @@ class GenericStrippingAvroParser(GenericStreamingAvroParser):
         tostrip should be a list of field names that are to be removed
         from the streamed Avro data.
         """
-        super(GenericStrippingAvroParser, self).__init__(source)
+        super(GenericStrippingAvroParser, self).__init__(source, initbody)
 
         self.tostrip = set(tostrip)
 
