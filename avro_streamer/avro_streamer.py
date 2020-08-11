@@ -19,7 +19,7 @@
 #   * support additional data types (float etc)
 #   * make other operations easier to perform, e.g. adding new fields
 
-import json, snappy, binascii
+import json, snappy, zlib, binascii
 
 from struct import pack
 
@@ -281,9 +281,9 @@ class GenericStreamingAvroParser(object):
             self.bused += block_size
 
         elif self.codec == "deflate":
-            # TODO
-            raise AvroParsingFailureException(\
-                    "Unsupported codec: %s" % (self.codec))
+            inflated = zlib.decompress(\
+                    self.buffered[self.bused: self.bused + block_size], -15)
+            self.bused += block_size
         else:
             raise AvroParsingFailureException(\
                     "Unknown codec: %s" % (self.codec))
@@ -299,9 +299,8 @@ class GenericStreamingAvroParser(object):
             compressed = snappy.compress(reencoded)
             complen = len(compressed) + 4
         elif self.codec == "deflate":
-            # TODO
-            compressed = ""
-            complen = 0
+            compressed = zlib.compress(reencoded, 1)[2:-1]
+            complen = len(compressed)
         else:
             compressed = ""
             complen = 0
