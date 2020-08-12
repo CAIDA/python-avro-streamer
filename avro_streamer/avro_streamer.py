@@ -275,11 +275,9 @@ class GenericStreamingAvroParser(object):
             raise AvroInsufficientDataException()
 
         if self.codec == "snappy":
-
             inflated = snappy.decompress(\
                     self.buffered[self.bused: self.bused + block_size - 4])
-            self.bused += block_size
-
+            self.bused += block_size + 4  # for CRC
         elif self.codec == "deflate":
             inflated = zlib.decompress(\
                     self.buffered[self.bused: self.bused + block_size], -15)
@@ -297,21 +295,17 @@ class GenericStreamingAvroParser(object):
 
         if self.codec == "snappy":
             compressed = snappy.compress(reencoded)
-            complen = len(compressed)
+            self.saved += self._encode_long(len(compressed) + 4)  # for CRC
+            self.saved += compressed
+            csum = binascii.crc32(reencoded) & 0xffffffff
+            self.saved += pack("I", csum)
         elif self.codec == "deflate":
             compressed = zlib.compress(reencoded, 1)[2:-1]
-            complen = len(compressed)
+            self.saved += self._encode_long(len(compressed))
+            self.saved += compressed
         else:
-            compressed = ""
-            complen = 0
-
-        # Make sure the length that we encode also includes the
-        # 32bit CRC
-        self.saved += self._encode_long(complen + 4)
-        self.saved += compressed
-
-        csum = binascii.crc32(reencoded) & 0xffffffff
-        self.saved += pack("I", csum)
+            raise AvroParsingFailureException(\
+                    "Unknown codec: %s" % (self.codec))
 
         self.buffered = self.buffered[self.bused:]
         self.blen -= self.bused
