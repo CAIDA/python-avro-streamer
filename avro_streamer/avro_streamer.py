@@ -297,7 +297,7 @@ class GenericStreamingAvroParser(object):
 
         if self.codec == "snappy":
             compressed = snappy.compress(reencoded)
-            complen = len(compressed) + 4
+            complen = len(compressed)
         elif self.codec == "deflate":
             compressed = zlib.compress(reencoded, 1)[2:-1]
             complen = len(compressed)
@@ -305,7 +305,9 @@ class GenericStreamingAvroParser(object):
             compressed = ""
             complen = 0
 
-        self.saved += self._encode_long(complen)
+        # Make sure the length that we encode also includes the
+        # 32bit CRC
+        self.saved += self._encode_long(complen + 4)
         self.saved += compressed
 
         csum = binascii.crc32(reencoded) & 0xffffffff
