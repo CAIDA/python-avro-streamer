@@ -19,7 +19,7 @@
 #   * support additional data types (float etc)
 #   * make other operations easier to perform, e.g. adding new fields
 
-import json, snappy, binascii
+import json, snappy, zlib, binascii
 
 from struct import pack
 
@@ -275,15 +275,13 @@ class GenericStreamingAvroParser(object):
             raise AvroInsufficientDataException()
 
         if self.codec == "snappy":
-
             inflated = snappy.decompress(\
                     self.buffered[self.bused: self.bused + block_size - 4])
-            self.bused += block_size
-
+            self.bused += block_size + 4  # for CRC
         elif self.codec == "deflate":
-            # TODO
-            raise AvroParsingFailureException(\
-                    "Unsupported codec: %s" % (self.codec))
+            inflated = zlib.decompress(\
+                    self.buffered[self.bused: self.bused + block_size], -15)
+            self.bused += block_size
         else:
             raise AvroParsingFailureException(\
                     "Unknown codec: %s" % (self.codec))
@@ -297,20 +295,17 @@ class GenericStreamingAvroParser(object):
 
         if self.codec == "snappy":
             compressed = snappy.compress(reencoded)
-            complen = len(compressed) + 4
+            self.saved += self._encode_long(len(compressed) + 4)  # for CRC
+            self.saved += compressed
+            csum = binascii.crc32(reencoded) & 0xffffffff
+            self.saved += pack("I", csum)
         elif self.codec == "deflate":
-            # TODO
-            compressed = ""
-            complen = 0
+            compressed = zlib.compress(reencoded, 1)[2:-1]
+            self.saved += self._encode_long(len(compressed))
+            self.saved += compressed
         else:
-            compressed = ""
-            complen = 0
-
-        self.saved += self._encode_long(complen)
-        self.saved += compressed
-
-        csum = binascii.crc32(reencoded) & 0xffffffff
-        self.saved += pack("I", csum)
+            raise AvroParsingFailureException(\
+                    "Unknown codec: %s" % (self.codec))
 
         self.buffered = self.buffered[self.bused:]
         self.blen -= self.bused
